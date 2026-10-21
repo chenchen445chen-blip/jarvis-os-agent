@@ -114,6 +114,53 @@ AGENT_TOOLS_SCHEMA = [
                 "properties": {}
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_command",
+            "description": "在操作系统本地终端（Shell/Terminal）中执行命令行指令。支持查看文件（cat、head、tail、ls）、检索查找（grep、find）、修改与写入文件（echo、tee、sed、python脚本）、执行系统脚本、查看进程、运行构建、管理 git 等一切终端操作。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "要执行的 Shell 终端命令行字符串，例如 'ls -la'、'cat README.md'、'git status'"},
+                    "cwd": {"type": "string", "description": "可选的命令执行工作目录，默认为当前项目根目录"}
+                },
+                "required": ["command"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "查看或读取本地文本文件的内容，支持按行范围精准读取，适合查看代码、日志、配置文件等",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "要查看的文件相对路径或绝对路径，例如 'README.md' 或 'backend/os_tools.py'"},
+                    "start_line": {"type": "integer", "description": "起始行号（从 1 开始），默认 1"},
+                    "line_count": {"type": "integer", "description": "读取行数，默认 200 行"}
+                },
+                "required": ["file_path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "modify_file",
+            "description": "创建或修改本地文本文件内容（支持全量覆盖写入或末尾追加）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "要修改或创建的文件路径"},
+                    "content": {"type": "string", "description": "要写入的文件完整文本内容"},
+                    "mode": {"type": "string", "enum": ["overwrite", "append"], "description": "写入模式：'overwrite' 覆盖写入，'append' 追加在末尾，默认 overwrite"}
+                },
+                "required": ["file_path", "content"]
+            }
+        }
     }
 ]
 
@@ -124,7 +171,7 @@ def get_system_prompt() -> str:
     weekday_str = weekday_map.get(now.weekday(), "")
     return f"""你是由先进桌面架构驱动的私人 AI 助手【贾维斯·陈】(Jarvis Chen Desktop OS Agent)。
 你的唯一正式名字是“贾维斯·陈”（Jarvis Chen），当用户询问你的身份或名字时，请始终以【贾维斯·陈】自称。
-你具有最高级别的系统控制权限，能调起本地软件、播放音乐、操控日历、读取邮件、监控电脑性能与联动 AI 绘图。
+你具有最高级别的系统控制权限，能调起本地软件、在系统终端执行命令行（执行Shell命令、查看/修改文件、脚本运行、Git管理等）、播放音乐、操控日历、读取邮件、监控电脑性能与联动 AI 绘图。
 
 【当前宿主系统实时环境】：
 - 本地真实日期时间：{now_str}，{weekday_str}。当用户询问“今天几号”、“现在的日期”、“当前时间”、“今天是周几”时，请依据此真实时间直接作答。
@@ -137,7 +184,7 @@ def get_system_prompt() -> str:
 【工具调用与意图识别严格边界】：
 1. 区分【知识问答/文学诗词】与【系统控制】：
    - 诗词、文学、常识、成语、翻译、课文、散文、寓言、故事、笑话等属于纯智力对话问答（如“找首李白的古诗”、“背一下静夜思”、“讲个笑话”），请直接在回复中用自然优美的语言为用户背诵、展示和讲解，【绝对禁止】调用 play_music 或任何系统工具。
-   - 只有在用户明确希望操作电脑、打开软件，或明确表达想听音乐歌曲（如“播放周杰伦的青花瓷”、“放首歌听听”）时，才可调用对应的系统工具。
+   - 当用户要求执行命令行、查看文件、修改文件、打开软件、播放音乐、管理日历或检查邮件时，请主动调用对应的工具。
 2. 严禁过度调用（Over-tooling）：在收到明确的系统操作指令时，才调用对应的工具；常规闲聊和知识咨询直接回答即可。执行系统工具完毕后，结合工具返回的真实数据用简练得体的语言回答用户。"""
 
 def load_dotenv():
@@ -300,6 +347,14 @@ class AgentBrain:
                     reply = tool_msg or "已为您检查邮件收件箱。"
                 elif tool_name == "generate_ai_image":
                     reply = tool_msg or "AI 图像生成已就绪，结果已保存至本地目录。"
+                elif tool_name == "execute_command":
+                    cmd = tool_args.get("command", "")
+                    out = tool_result.get("output", "")
+                    reply = f"已执行终端命令：[{cmd}]。" + (f"\n输出内容：\n{out}" if out else "")
+                elif tool_name == "read_file":
+                    reply = tool_msg or f"已为您读取文件 [{tool_args.get('file_path')}] 内容。"
+                elif tool_name == "modify_file":
+                    reply = tool_msg or f"已为您更新文件 [{tool_args.get('file_path')}] 内容。"
                 else:
                     reply = tool_msg or msg.get("content") or "指令已为您执行完毕。"
 
@@ -431,6 +486,23 @@ class AgentBrain:
             return self.tools.check_emails(filter_unread=args.get("filter_unread", True))
         elif tool_name == "get_system_status":
             return self.tools.get_system_status()
+        elif tool_name == "execute_command":
+            return self.tools.execute_command(
+                command=args.get("command", ""),
+                cwd=args.get("cwd", "")
+            )
+        elif tool_name == "read_file":
+            return self.tools.read_file(
+                file_path=args.get("file_path", ""),
+                start_line=args.get("start_line", 1),
+                line_count=args.get("line_count", 200)
+            )
+        elif tool_name == "modify_file":
+            return self.tools.modify_file(
+                file_path=args.get("file_path", ""),
+                content=args.get("content", ""),
+                mode=args.get("mode", "overwrite")
+            )
         return {"success": False, "message": f"未注册的工具: {tool_name}"}
 
     def _fallback_intent_router(self, user_text: str) -> Optional[Dict[str, Any]]:
@@ -474,6 +546,26 @@ class AgentBrain:
         # 系统状态
         if any(w in text for w in ["系统状态", "cpu", "内存", "电脑状态", "电量", "运行情况"]):
             return {"tool": "get_system_status", "args": {}}
+
+        # 命令行执行 (支持 "执行命令 ls", "运行命令 git status", "执行命令行 pwd", "终端指令 ...")
+        if any(text.startswith(p) for p in ["执行命令", "运行命令", "执行命令行", "运行终端", "命令行", "终端", "执行终端"]):
+            cmd = re.sub(r"^(请|帮我)?(执行命令行|执行终端命令|运行终端命令|执行命令|运行命令|命令行|终端|执行终端)", "", text).strip(" :：`'\"")
+            if cmd:
+                return {"tool": "execute_command", "args": {"command": cmd}}
+
+        # 查看文件 (支持 "查看文件 backend/os_tools.py", "读取文件 README.md", "看文件 ...")
+        if any(text.startswith(p) for p in ["查看文件", "读取文件", "读文件", "看看文件", "显示文件"]):
+            fp = re.sub(r"^(请|帮我)?(查看文件|读取文件|读文件|看看文件|显示文件)", "", text).strip(" :：`'\"")
+            if fp:
+                return {"tool": "read_file", "args": {"file_path": fp}}
+
+        # 修改或写入文件 (如 "修改文件 test.txt 内容为 hello", "写入文件 ...")
+        if any(text.startswith(p) for p in ["修改文件", "写入文件", "创建文件", "保存文件"]):
+            match = re.search(r"^(?:请|帮我)?(?:修改文件|写入文件|创建文件|保存文件)\s*([^\s]+)(?:\s+(?:内容为|写入|内容是|添加)\s*(.+))?$", text)
+            if match:
+                fp = match.group(1).strip(" :：`'\"")
+                content = match.group(2) or ""
+                return {"tool": "modify_file", "args": {"file_path": fp, "content": content}}
 
         # 打开应用
         if text.startswith("打开") or text.startswith("启动") or text.startswith("运行"):
@@ -534,6 +626,14 @@ class AgentBrain:
                     reply = tool_result.get("message", "日历数据库已同步。")
                 elif tool_executed == "get_system_status":
                     reply = f"先生，当前系统运行平稳。CPU 占用 {tool_result.get('cpu_usage')}，内存负载 {tool_result.get('memory_usage')}，电量状态：{tool_result.get('battery')}。"
+                elif tool_executed == "execute_command":
+                    cmd = tool_args.get("command", "")
+                    out = tool_result.get("output", "")
+                    reply = f"已执行终端命令 [{cmd}]。" + (f"\n终端输出：\n{out}" if out else "")
+                elif tool_executed == "read_file":
+                    reply = tool_result.get("message", "文件内容已读取完毕。")
+                elif tool_executed == "modify_file":
+                    reply = tool_result.get("message", "文件内容已更新完毕。")
                 else:
                     reply = tool_result.get("message", "指令执行完毕。")
             else:

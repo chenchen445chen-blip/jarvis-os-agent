@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import platform
 import subprocess
 import json
@@ -117,6 +118,191 @@ class OSTools:
             "command": cmd,
             "message": message
         }
+
+    def execute_command(self, command: str, cwd: str = "") -> Dict[str, Any]:
+        """
+        在操作系统本地终端（Shell/Terminal）中执行命令行指令。
+        支持文件查看(cat/head/tail/ls)、文件修改与写入(echo/tee/sed/python脚本)、检索查找(grep/find)、目录操作、Git操作等一切终端指令。
+        """
+        if not command or not command.strip():
+            return {
+                "success": False,
+                "command": command,
+                "output": "",
+                "message": "指令为空，无法执行终端命令。"
+            }
+
+        # 危险命令拦截保护
+        dangerous_patterns = [
+            r"\brm\s+.*-[a-zA-Z]*r[a-zA-Z]*\s+/(?:\s|$|\*)",
+            r"\bmkfs\b",
+            r"\bdd\s+if=",
+            r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;",
+        ]
+        for pattern in dangerous_patterns:
+            if re.search(pattern, command.strip()):
+                return {
+                    "success": False,
+                    "command": command,
+                    "output": "",
+                    "message": f"安全拦截：检测到高危系统破坏性命令 [{command}]，已阻止执行以保护系统安全。"
+                }
+
+        # 项目根目录作为缺省工作目录
+        base_dir = str(Path(__file__).resolve().parent.parent)
+        work_dir = cwd.strip() if cwd and os.path.exists(cwd.strip()) else base_dir
+
+        try:
+            res = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=work_dir,
+                timeout=30
+            )
+            stdout = res.stdout.strip()
+            stderr = res.stderr.strip()
+            success = res.returncode == 0
+
+            # 聚合标准输出与错误输出
+            combined = stdout if stdout else stderr
+            if stdout and stderr:
+                combined = f"{stdout}\n[STDERR]:\n{stderr}"
+
+            # 截断超大输出防止上下文爆满
+            if len(combined) > 4000:
+                combined = combined[:4000] + "\n...[输出过长，已截断显示]..."
+
+            if success:
+                msg = f"命令执行成功（退出码 0）。\n输出：\n{combined}" if combined else "命令执行成功，终端无内容输出。"
+            else:
+                msg = f"命令执行失败（退出码 {res.returncode}）。\n错误输出：\n{stderr or combined}"
+
+            return {
+                "success": success,
+                "command": command,
+                "returncode": res.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+                "output": combined,
+                "cwd": work_dir,
+                "message": msg
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "command": command,
+                "returncode": -1,
+                "output": "",
+                "cwd": work_dir,
+                "message": f"执行超时（已达 30 秒限时），进程已自动终止。"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "command": command,
+                "returncode": -1,
+                "output": "",
+                "cwd": work_dir,
+                "message": f"执行终端命令异常: {str(e)}"
+            }
+
+    def read_file(self, file_path: str, start_line: int = 1, line_count: int = 200) -> Dict[str, Any]:
+        """
+        查看或读取本地文本文件的内容
+        支持相对路径（相对项目根目录）或绝对路径，支持按行范围读取
+        """
+        if not file_path or not file_path.strip():
+            return {"success": False, "message": "文件路径不能为空。"}
+
+        target = Path(file_path.strip())
+        if not target.is_absolute():
+            base_dir = Path(__file__).resolve().parent.parent
+            target = (base_dir / target).resolve()
+
+        if not target.exists():
+            return {
+                "success": False,
+                "file_path": str(target),
+                "message": f"文件不存在：{target}"
+            }
+
+        if not target.is_file():
+            return {
+                "success": False,
+                "file_path": str(target),
+                "message": f"目标路径不是普通文件：{target}"
+            }
+
+        try:
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            except UnicodeDecodeError:
+                with open(target, "r", encoding="gbk", errors="ignore") as f:
+                    lines = f.readlines()
+
+            total_lines = len(lines)
+            start_idx = max(0, start_line - 1)
+            end_idx = min(total_lines, start_idx + max(1, line_count))
+            selected_lines = lines[start_idx:end_idx]
+
+            content_with_nums = "".join(
+                f"{i + 1:4d}: {line}" for i, line in enumerate(selected_lines, start=start_idx)
+            )
+
+            msg = f"已读取文件 [{target.name}]（共 {total_lines} 行，展示第 {start_idx + 1} ~ {end_idx} 行）：\n{content_with_nums}"
+            return {
+                "success": True,
+                "file_path": str(target),
+                "total_lines": total_lines,
+                "start_line": start_idx + 1,
+                "end_line": end_idx,
+                "content": "".join(selected_lines),
+                "message": msg
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "file_path": str(target),
+                "message": f"读取文件异常: {str(e)}"
+            }
+
+    def modify_file(self, file_path: str, content: str, mode: str = "overwrite") -> Dict[str, Any]:
+        """
+        修改或创建本地文本文件
+        mode 支持 'overwrite'（覆盖写入）或 'append'（追加在末尾）
+        """
+        if not file_path or not file_path.strip():
+            return {"success": False, "message": "文件路径不能为空。"}
+
+        target = Path(file_path.strip())
+        if not target.is_absolute():
+            base_dir = Path(__file__).resolve().parent.parent
+            target = (base_dir / target).resolve()
+
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            write_mode = "a" if mode == "append" else "w"
+            with open(target, write_mode, encoding="utf-8") as f:
+                f.write(content)
+
+            total_size = target.stat().st_size
+            action_desc = "追加内容至" if mode == "append" else "成功写入/覆盖"
+            return {
+                "success": True,
+                "file_path": str(target),
+                "mode": mode,
+                "size_bytes": total_size,
+                "message": f"已{action_desc}文件：[{target.name}]（路径: {target}，大小: {total_size} 字节）。"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "file_path": str(target),
+                "message": f"修改/写入文件失败: {str(e)}"
+            }
 
     def play_music(self, song_name: str = "", artist: str = "") -> Dict[str, Any]:
         """播放音乐（优先调起音乐软件，或通过系统默认播放/网页试听）"""

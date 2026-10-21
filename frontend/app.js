@@ -126,7 +126,14 @@ async function handleUserCommand(command) {
       
       const toolRes = toolCall.result ?? {};
       if (toolRes.file_path) {
-        appendLog("SUCCESS", `[FILE SAVED] 生成结果: ${toolRes.file_path}`);
+        appendLog("SUCCESS", `[FILE] 目标文件: ${toolRes.file_path}`);
+      }
+      if (toolCall.name === "execute_command" && toolRes.command) {
+        appendLog("INFO", `[TERMINAL] $ ${toolRes.command}`);
+        if (toolRes.output) {
+          const firstLine = toolRes.output.split("\n")[0];
+          appendLog(toolRes.success ? "SUCCESS" : "WARN", `[OUTPUT] ${firstLine}`);
+        }
       }
     }
 
@@ -198,7 +205,8 @@ window.triggerQuickAction = function(action) {
     calendar: "查看今天所有的日程安排",
     emails: "帮我读一下未读邮件",
     ai_paint: "帮我画一张具有未来感的光子反应堆概念图",
-    status: "检查当前的电脑硬件系统状态"
+    status: "检查当前的电脑硬件系统状态",
+    terminal: "执行命令 ls -la 查看当前项目文件"
   };
   const cmd = actionsMap[action] ?? action;
   handleUserCommand(cmd);

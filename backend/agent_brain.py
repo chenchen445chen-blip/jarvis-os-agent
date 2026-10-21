@@ -39,11 +39,11 @@ AGENT_TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "play_music",
-            "description": "播放音乐，调起本地音乐客户端或进行歌曲检索播放",
+            "description": "播放音乐歌曲。仅在用户明确表达想听音乐、听歌、播放歌曲时调用。严禁用在古诗、诗词、文言文、课文、散文、寓言或任何文学与知识问答中（此类内容请直接在对话中背诵或解答，绝对不要调用此工具）。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "song_name": {"type": "string", "description": "歌名或歌手名"}
+                    "song_name": {"type": "string", "description": "歌名或歌手名（必须是真实音乐歌曲作品，禁止传入诗词或文章篇目）"}
                 }
             }
         }
@@ -133,7 +133,12 @@ def get_system_prompt() -> str:
 1. 口语化优先：你的回复将直接通过文本转语音（TTS）朗读给用户收听，请使用自然沉稳、简洁清晰的口语化中文。
 2. 严禁特殊排版符号：严禁在正文中使用 Markdown 加粗符号（如 **文本**）、星号（*）、井号标题（#）、表格符号（|）或复杂列表标记，避免语音引擎朗读出“星号星号”、“竖线”等符号噪音。请使用普通逗号、句号自然断句。
 3. 风格：极富未来科技感、专业、沉稳、从容、高效。
-4. 在收到系统操作指令时，请主动调用对应的工具；执行完毕后，结合工具返回的真实数据用简练、得体的语言回答用户。"""
+
+【工具调用与意图识别严格边界】：
+1. 区分【知识问答/文学诗词】与【系统控制】：
+   - 诗词、文学、常识、成语、翻译、课文、散文、寓言、故事、笑话等属于纯智力对话问答（如“找首李白的古诗”、“背一下静夜思”、“讲个笑话”），请直接在回复中用自然优美的语言为用户背诵、展示和讲解，【绝对禁止】调用 play_music 或任何系统工具。
+   - 只有在用户明确希望操作电脑、打开软件，或明确表达想听音乐歌曲（如“播放周杰伦的青花瓷”、“放首歌听听”）时，才可调用对应的系统工具。
+2. 严禁过度调用（Over-tooling）：在收到明确的系统操作指令时，才调用对应的工具；常规闲聊和知识咨询直接回答即可。执行系统工具完毕后，结合工具返回的真实数据用简练得体的语言回答用户。"""
 
 def load_dotenv():
     """轻量级自动加载项目根目录下的 .env 环境变量文件"""
@@ -223,6 +228,26 @@ class AgentBrain:
                 except Exception:
                     tool_args = {}
 
+                # 【智能拦截卫兵 Smart Guard】：防止把文学/古诗词/散文/知识问答误调为音乐播放
+                if tool_name == "play_music":
+                    song_arg = str(tool_args.get("song_name", "")).lower()
+                    u_input = user_input.lower()
+                    literature_kw = ["诗", "词", "文言文", "课文", "散文", "寓言", "朗诵", "诗歌", "唐诗", "宋词", "元曲", "绝句", "律诗"]
+                    music_explicit_kw = ["歌", "音乐", "单曲", "专辑", "唱片", "旋律", "bgm", "伴奏", "点歌", "听歌", "放歌"]
+
+                    is_literature = any(k in u_input or k in song_arg for k in literature_kw)
+                    has_music_intent = any(k in u_input for k in music_explicit_kw)
+
+                    if is_literature and not has_music_intent:
+                        print(f"[Smart Guard] 检测到用户意图为文学诗词，拦截误调用的 play_music ({tool_args})，转为直接对话回复")
+                        direct_reply = self._direct_chat_reply(messages)
+                        return {
+                            "reply": direct_reply or "为你找到李白的《静夜思》：床前明月光，疑是地上霜。举头望明月，低头思故乡。",
+                            "tool_executed": None,
+                            "tool_args": {},
+                            "tool_result": None
+                        }
+
                 # 执行底层工具
                 tool_result = self.execute_tool(tool_name, tool_args)
                 
@@ -297,6 +322,39 @@ class AgentBrain:
         except Exception as e:
             print(f"[LLM Remote Exception] 请求异常: {e}")
 
+        return None
+
+    def _direct_chat_reply(self, messages: List[Dict[str, str]]) -> Optional[str]:
+        """
+        纯文本深度对话（无工具模式），用于回答诗词文学、百科知识或被拦截后的直接回复
+        """
+        if not self.api_key:
+            return None
+        import requests
+        url = f"{self.api_base}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:8765",
+            "X-Title": "Jarvis Desktop OS Agent"
+        }
+        # 不携带 tools 参数，强制模型作为智能对话助手直接输出文本
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 1000
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=20)
+            if resp.status_code == 200:
+                data = resp.json()
+                choices = data.get("choices") or [{}]
+                reply = (choices[0].get("message", {}).get("content") or "").strip()
+                if reply:
+                    return reply
+        except Exception as e:
+            print(f"[Direct Chat Reply Error]: {e}")
         return None
 
     def humanize_speech_text(self, text: str) -> str:
@@ -385,6 +443,10 @@ class AgentBrain:
         # 微信命令行专属意图快速识别（支持“打开微信”、“启动微信”、“唤醒微信”等）
         if any(w in text for w in ["微信", "wechat"]) and (any(a in text for a in ["打开", "启动", "唤醒", "开", "登", "运行"]) or text in ["微信", "wechat"]):
             return {"tool": "open_wechat", "args": {}}
+
+        # 排除文学与诗词问答，避免误判为播放音乐
+        if any(w in text for w in ["诗", "词", "文言文", "课文", "散文", "寓言", "成语", "笑话"]) and not any(w in text for w in ["歌", "音乐"]):
+            return None
 
         # 音乐相关
         if any(w in text for w in ["听歌", "放歌", "播放音乐", "放首歌", "播放", "音乐"]):
@@ -475,8 +537,13 @@ class AgentBrain:
                 else:
                     reply = tool_result.get("message", "指令执行完毕。")
             else:
-                # 常规对话问答兜底
-                reply = f"贾维斯·陈在线。我已经收到您的指令：“{user_input}”。随时听候您的差遣，您可以随时让我调起软件、播放音乐、查询日程或生成图像。"
+                # 常规对话与诗词文学知识问答兜底
+                if any(w in user_input for w in ["李白", "静夜思"]):
+                    reply = "为您找到李白的《静夜思》：床前明月光，疑是地上霜。举头望明月，低头思故乡。"
+                elif any(w in user_input for w in ["古诗", "诗词"]):
+                    reply = "为您吟诵李白名篇《望庐山瀑布》：日照香炉生紫烟，遥看瀑布挂前川。飞流直下三千尺，疑是银河落九天。"
+                else:
+                    reply = f"贾维斯·陈在线。我已经收到您的指令：“{user_input}”。随时听候您的差遣，您可以随时让我调起软件、播放音乐、查询日程或生成图像。"
 
         self.memory.add_message("assistant", reply)
 

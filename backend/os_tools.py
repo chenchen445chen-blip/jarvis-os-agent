@@ -121,6 +121,16 @@ class OSTools:
     def play_music(self, song_name: str = "", artist: str = "") -> Dict[str, Any]:
         """播放音乐（优先调起音乐软件，或通过系统默认播放/网页试听）"""
         query = f"{song_name} {artist}".strip()
+        lower_q = query.lower()
+
+        # 防御性校验：若明显是古诗词朗诵而非音乐，避免弹出播放器或打开网页
+        if any(w in lower_q for w in ["古诗", "唐诗", "宋词", "文言文", "诗词", "朗诵"]) and not any(w in lower_q for w in ["歌", "曲", "音乐"]):
+            return {
+                "success": False,
+                "message": f"检测到 [{query}] 属于诗词文学内容，已拦截调起音乐播放器，由助手直接在对话中为您朗诵与解读。",
+                "song": query
+            }
+
         # 尝试唤醒网易云或音乐客户端
         app_res = self.open_application("网易云音乐")
         

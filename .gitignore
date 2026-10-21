@@ -1,0 +1,128 @@
+# ==============================================================================
+# JARVIS / AIVY OS - Git 过滤与安全隐私防护规则 (.gitignore)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. 核心安全与私密配置（严禁上传包含个人 API Key、密钥的配置文件）
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+# 保留环境变量模版文件，方便开源克隆者配置
+!.env.example
+
+# SSL 证书与密钥凭证
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# ------------------------------------------------------------------------------
+# 2. 用户本地数据与私有记忆库（保护对话历史、日历日程与本地生成图片）
+# ------------------------------------------------------------------------------
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.sqlite
+data/*.sqlite3
+data/generated_images/*
+!data/generated_images/.gitkeep
+!data/.gitkeep
+
+# ------------------------------------------------------------------------------
+# 3. Python 编译缓存与虚拟环境
+# ------------------------------------------------------------------------------
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Python 虚拟环境
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# 单元测试与覆盖率报告
+.cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ------------------------------------------------------------------------------
+# 4. Node.js / Electron 依赖与桌面端打包产物
+# ------------------------------------------------------------------------------
+node_modules/
+*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Electron 独立打包产物 (.app, .dmg, .exe 等)
+desktop-electron/dist/
+desktop-electron/build/
+desktop-electron/.electron-builder/
+
+# ------------------------------------------------------------------------------
+# 5. 操作系统与本地 IDE 配置（排除 macOS、Windows 及编辑器缓存）
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+*/.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# IDE 与编辑器
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# ------------------------------------------------------------------------------
+# 6. 本地运行日志与临时中间过程文件
+# ------------------------------------------------------------------------------
+*.log
+logs/
+temp/
+tmp/
+scratch/

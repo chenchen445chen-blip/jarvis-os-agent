@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS / AIVY OS - 桌面级私人智能体</title>
+  <!-- 引入 Three.js 库用于 3D 粒子反应堆渲染 -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 背景网格与环境光效 -->
+  <div class="cyber-grid"></div>
+  <div class="glow-orb top-left"></div>
+  <div class="glow-orb bottom-right"></div>
+
+  <div class="os-container">
+    <!-- 顶部 HUD 状态栏 -->
+    <header class="hud-header">
+      <div class="header-left">
+        <div class="system-status-indicator pulse-cyan"></div>
+        <div class="title-group">
+          <span class="system-title">JARVIS · CHEN // OS</span>
+          <span class="system-subtitle">DESKTOP AUTONOMOUS AGENT CORE</span>
+        </div>
+      </div>
+      <div class="header-center">
+        <div class="core-mode-badge" id="coreModeBadge">STANDBY 待机监控中</div>
+      </div>
+      <div class="header-right">
+        <div class="time-display" id="hudClock">--:--:--</div>
+        <div class="net-status">LINK: LOCAL-OS</div>
+      </div>
+    </header>
+
+    <!-- 中间主体区域 -->
+    <main class="hud-main">
+      <!-- 中间：3D 粒子球与全双工声波中心 -->
+      <section class="hud-center">
+        <!-- 3D WebGL Canvas 容器 -->
+        <div id="particleCanvasContainer"></div>
+
+        <!-- 粒子球下方：动态声波柱与唤醒提示 -->
+        <div class="audio-visualizer-container">
+          <div class="visualizer-bars" id="audioVisualizer">
+            <!-- 动态生成 24 个音频频域柱条 -->
+          </div>
+        </div>
+
+        <!-- 对话字幕与贾维斯响应浮窗 -->
+        <div class="speech-bubble-container" id="speechBubble">
+          <div class="bubble-tag" id="bubbleTag">JARVIS · CHEN 响应</div>
+          <div class="bubble-text" id="bubbleText">
+            您好，我是您的桌面专属助理贾维斯·陈。随时对我说出指令或在下方打字。
+          </div>
+        </div>
+      </section>
+
+      <!-- 右侧：工具调用日志链与动态感知卡片 -->
+      <section class="hud-panel right-panel">
+        <div class="panel-box flex-grow">
+          <div class="panel-header">
+            <span class="icon">🧠</span>
+            <h3>智能体思维与工具调用链</h3>
+          </div>
+          <div class="action-logs" id="actionLogs">
+            <div class="log-item info">
+              <span class="log-time">[INIT]</span>
+              <span class="log-msg">Agent 编排框架已就绪，已挂载 OS 执行工具库。</span>
+            </div>
+            <div class="log-item success">
+              <span class="log-time">[READY]</span>
+              <span class="log-msg">长短期记忆引擎（SQLite）连接成功。</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <div class="panel-header">
+            <span class="icon">📋</span>
+            <h3>日程与即时任务</h3>
+          </div>
+          <div class="event-list" id="eventList">
+            <div class="event-placeholder">暂无紧急日程</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部控制与多模态指令交互条 -->
+    <footer class="hud-footer">
+      <div class="voice-switch-group">
+        <button class="mic-toggle-btn" id="micBtn" title="点击开始/停止语音输入">
+          <div class="mic-icon-circle">
+            <svg viewBox="0 0 24 24" class="mic-svg">
+              <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </div>
+          <span class="mic-label" id="micLabel">语音拾音 (待命)</span>
+        </button>
+
+        <label class="wake-word-toggle">
+          <input type="checkbox" id="wakeWordCheckbox" checked>
+          <span>唤醒词：“贾维斯·陈 / 贾维斯”</span>
+        </label>
+      </div>
+
+      <div class="input-form">
+        <input 
+          type="text" 
+          id="commandInput" 
+          class="cyber-input" 
+          placeholder="给贾维斯·陈下达指令，如：'打开微信'、'放首歌'、'读邮件'、'查日程'..." 
+          autocomplete="off"
+        />
+        <button id="sendBtn" class="cyber-btn primary">
+          <span>执行指令</span>
+          <span class="btn-corner"></span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 引入模块脚本 -->
+  <script src="cyborg_model_data.js"></script>
+  <script src="particles.js"></script>
+  <script src="speech.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

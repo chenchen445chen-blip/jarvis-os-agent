@@ -1,0 +1,531 @@
+/* ==========================================================================
+   JARVIS / AIVY OS - FUTURISTIC HUD STYLESHEET
+   ========================================================================== */
+
+:root {
+  --bg-deep: #050b14;
+  --bg-panel: rgba(10, 22, 40, 0.65);
+  --bg-panel-border: rgba(0, 243, 255, 0.22);
+  --cyan-glow: #00f3ff;
+  --cyan-dim: rgba(0, 243, 255, 0.15);
+  --purple-glow: #bd00ff;
+  --accent-orange: #ff9100;
+  --accent-green: #00ff66;
+  --text-main: #e2f1ff;
+  --text-muted: #7e9bb5;
+  --font-mono: "SF Mono", "Fira Code", "Courier New", monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+}
+
+/* 背景科技网格与环境辉光 */
+.cyber-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(0, 243, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 243, 255, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.glow-orb {
+  position: absolute;
+  width: 450px;
+  height: 450px;
+  border-radius: 50%;
+  filter: blur(140px);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.35;
+}
+.glow-orb.top-left {
+  top: -150px;
+  left: -150px;
+  background: var(--cyan-glow);
+}
+.glow-orb.bottom-right {
+  bottom: -150px;
+  right: -150px;
+  background: var(--purple-glow);
+}
+
+/* 主容器布局 */
+.os-container {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 24px 24px 16px 24px; /* 顶部留足空间兼容 macOS 原生红黄绿胶囊按钮 */
+}
+
+/* 顶部 HUD 状态栏（支持 macOS 窗口原生拖拽） */
+.hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-panel-border);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.08);
+  -webkit-app-region: drag; /* 允许按住顶部栏拖动窗口 */
+}
+
+.hud-header button,
+.hud-header select,
+.hud-header input,
+.hud-header a {
+  -webkit-app-region: no-drag; /* 交互控件避免被拖拽拦截 */
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.system-status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cyan-glow);
+  box-shadow: 0 0 10px var(--cyan-glow);
+}
+.pulse-cyan {
+  animation: pulseCyan 2s infinite ease-in-out;
+}
+@keyframes pulseCyan {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 16px var(--cyan-glow); }
+}
+
+.title-group {
+  display: flex;
+  flex-direction: column;
+}
+.system-title {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  font-size: 16px;
+  color: var(--cyan-glow);
+  text-shadow: 0 0 8px rgba(0, 243, 255, 0.6);
+}
+.system-subtitle {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.core-mode-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  padding: 4px 16px;
+  border-radius: 20px;
+  background: rgba(0, 243, 255, 0.1);
+  border: 1px solid rgba(0, 243, 255, 0.4);
+  color: var(--cyan-glow);
+  transition: all 0.3s;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.time-display {
+  color: var(--text-main);
+  letter-spacing: 1px;
+}
+.net-status {
+  color: var(--accent-green);
+  font-size: 11px;
+}
+
+/* 主体内容区（中粒子反应堆、右智能体思维与调用链） */
+.hud-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 20px;
+  margin: 16px 0;
+  min-height: 0;
+}
+
+/* 通用 HUD 面板 */
+.hud-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.panel-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-panel-border);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel-box.flex-grow {
+  flex: 1;
+  min-height: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(0, 243, 255, 0.15);
+  padding-bottom: 8px;
+}
+.panel-header h3 {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+  color: var(--cyan-glow);
+}
+
+/* 硬件指标网格 */
+.metrics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metric-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00c6ff, var(--cyan-glow));
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.metric-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  align-self: flex-end;
+  color: var(--text-main);
+}
+.metric-val.highlight {
+  color: var(--accent-green);
+}
+
+/* 快捷工具按钮组 */
+.quick-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.quick-btn {
+  background: rgba(0, 243, 255, 0.06);
+  border: 1px solid rgba(0, 243, 255, 0.2);
+  border-radius: 6px;
+  color: var(--text-main);
+  padding: 10px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+.quick-btn:hover {
+  background: rgba(0, 243, 255, 0.18);
+  border-color: var(--cyan-glow);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 243, 255, 0.2);
+}
+
+/* 中间粒子球容器与对话展示区 */
+.hud-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#particleCanvasContainer {
+  width: 100%;
+  flex: 1;
+  min-height: 140px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+#particleCanvasContainer canvas {
+  outline: none;
+}
+
+/* 声波可视化柱（锁定容器几何尺寸，杜绝父子级重排抖动） */
+.audio-visualizer-container {
+  width: 280px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  z-index: 5;
+}
+.visualizer-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 32px;
+}
+.v-bar {
+  width: 4px;
+  height: 32px;
+  background: var(--cyan-glow);
+  border-radius: 2px;
+  transform-origin: bottom;
+  transform: scaleY(0.12);
+  box-shadow: 0 0 6px var(--cyan-glow);
+  will-change: transform;
+  transition: transform 0.08s ease-out;
+}
+
+/* 贾维斯智能体语音/文字回答浮窗（防撑破、防遮挡、自适应滚动） */
+.speech-bubble-container {
+  width: 96%;
+  max-width: 720px;
+  max-height: 220px;
+  flex-shrink: 0;
+  background: rgba(10, 25, 45, 0.92);
+  border: 1px solid var(--cyan-glow);
+  box-shadow: 0 0 25px rgba(0, 243, 255, 0.2);
+  backdrop-filter: blur(16px);
+  border-radius: 12px;
+  padding: 14px 18px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+.bubble-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan-glow);
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.bubble-text {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #e2f1ff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  max-height: 170px;
+  padding-right: 6px;
+}
+.bubble-text::-webkit-scrollbar {
+  width: 4px;
+}
+.bubble-text::-webkit-scrollbar-thumb {
+  background: rgba(0, 243, 255, 0.4);
+  border-radius: 2px;
+}
+.bubble-text::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 右侧行动日志 */
+.action-logs {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.log-item {
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-left: 2px solid var(--cyan-glow);
+  border-radius: 2px;
+  line-height: 1.4;
+}
+.log-item.info { border-color: var(--cyan-glow); }
+.log-item.success { border-color: var(--accent-green); }
+.log-item.warn { border-color: var(--accent-orange); }
+.log-time {
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.event-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid var(--purple-glow);
+}
+.event-placeholder {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* 底部交互控制条 */
+.hud-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--bg-panel-border);
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+}
+
+.voice-switch-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mic-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 243, 255, 0.1);
+  border: 1px solid rgba(0, 243, 255, 0.35);
+  color: var(--cyan-glow);
+  padding: 8px 16px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.mic-toggle-btn.active {
+  background: rgba(0, 255, 102, 0.2);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.4);
+}
+.mic-icon-circle {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mic-svg {
+  width: 18px;
+  height: 18px;
+}
+.mic-label {
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.wake-word-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.wake-word-toggle input {
+  accent-color: var(--cyan-glow);
+}
+
+.input-form {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+}
+.cyber-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 243, 255, 0.3);
+  border-radius: 6px;
+  color: #fff;
+  padding: 10px 16px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.cyber-input:focus {
+  border-color: var(--cyan-glow);
+  box-shadow: 0 0 12px rgba(0, 243, 255, 0.25);
+}
+
+.cyber-btn {
+  background: linear-gradient(135deg, rgba(0, 243, 255, 0.2), rgba(189, 0, 255, 0.2));
+  border: 1px solid var(--cyan-glow);
+  color: #fff;
+  padding: 0 24px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.cyber-btn:hover {
+  background: linear-gradient(135deg, rgba(0, 243, 255, 0.4), rgba(189, 0, 255, 0.4));
+  box-shadow: 0 0 15px rgba(0, 243, 255, 0.4);
+}

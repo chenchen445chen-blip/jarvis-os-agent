@@ -187,7 +187,7 @@ def get_system_prompt() -> str:
    - 当用户要求执行命令行、查看文件、修改文件、打开软件、播放音乐、管理日历或检查邮件时，请主动调用对应的工具。
 2. 严禁过度调用（Over-tooling）：在收到明确的系统操作指令时，才调用对应的工具；常规闲聊和知识咨询直接回答即可。执行系统工具完毕后，结合工具返回的真实数据用简练得体的语言回答用户。"""
 
-def load_dotenv():
+def load_dotenv(override: bool = True):
     """轻量级自动加载项目根目录下的 .env 环境变量文件"""
     candidates = [
         Path(__file__).resolve().parent.parent / ".env",
@@ -203,21 +203,22 @@ def load_dotenv():
                             k, v = line.split("=", 1)
                             k = k.strip()
                             v = v.strip().strip("'\"")
-                            if k not in os.environ:
+                            if override or k not in os.environ:
                                 os.environ[k] = v
                 break
             except Exception:
                 pass
 
-load_dotenv()
+load_dotenv(override=True)
 
 class AgentBrain:
     def __init__(self, memory: MemoryManager, tools: OSTools):
+        load_dotenv(override=True)
         self.memory = memory
         self.tools = tools
         self.api_key = os.getenv("LLM_API_KEY", "").strip()
         self.api_base = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        self.model_name = os.getenv("LLM_MODEL", "gpt-4o").strip()
+        self.model_name = os.getenv("LLM_MODEL", "GLM-4.7-Flash").strip()
 
     def _call_remote_llm(self, user_input: str) -> Optional[Dict[str, Any]]:
         """
@@ -253,10 +254,28 @@ class AgentBrain:
             "max_tokens": 1000
         }
 
+        models_to_try = [self.model_name]
+        # 若是智谱平台，增加 glm-4-flash 作为高可用兜底备选模型
+        if "bigmodel.cn" in self.api_base and "glm-4-flash" not in [m.lower() for m in models_to_try]:
+            models_to_try.append("glm-4-flash")
+
+        resp = None
+        used_model = self.model_name
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=25)
-            if resp.status_code != 200:
-                print(f"[LLM Remote Error] 状态码: {resp.status_code}, 内容: {resp.text}")
+            for m in models_to_try:
+                payload["model"] = m
+                try:
+                    r = requests.post(url, headers=headers, json=payload, timeout=25)
+                    if r.status_code == 200:
+                        resp = r
+                        used_model = m
+                        break
+                    else:
+                        print(f"[LLM Remote Warning] 模型 [{m}] 返回状态码 {r.status_code}，切换备用模型重试...")
+                except Exception as e:
+                    print(f"[LLM Remote Exception] 模型 [{m}] 请求异常: {e}")
+
+            if not resp:
                 return None
 
             data = resp.json()
@@ -309,16 +328,21 @@ class AgentBrain:
                     })
 
                     followup_payload = {
-                        "model": self.model_name,
+                        "model": used_model,
                         "messages": followup_messages,
                         "temperature": 0.7,
                         "max_tokens": 1000
                     }
                     followup_resp = requests.post(url, headers=headers, json=followup_payload, timeout=20)
+                    if followup_resp.status_code != 200 and "bigmodel.cn" in self.api_base and used_model != "glm-4-flash":
+                        followup_payload["model"] = "glm-4-flash"
+                        followup_resp = requests.post(url, headers=headers, json=followup_payload, timeout=20)
+
                     if followup_resp.status_code == 200:
                         followup_data = followup_resp.json()
                         followup_choices = followup_data.get("choices") or [{}]
-                        followup_content = (followup_choices[0].get("message", {}).get("content") or "").strip()
+                        m_obj = followup_choices[0].get("message", {})
+                        followup_content = (m_obj.get("content") or m_obj.get("reasoning_content") or "").strip()
                         if followup_content:
                             return {
                                 "reply": followup_content,
@@ -366,7 +390,7 @@ class AgentBrain:
                 }
 
             # 2. 常规深度问答与聊天
-            content = msg.get("content", "").strip()
+            content = (msg.get("content") or msg.get("reasoning_content") or "").strip()
             if content:
                 return {
                     "reply": content,
@@ -393,23 +417,28 @@ class AgentBrain:
             "HTTP-Referer": "http://localhost:8765",
             "X-Title": "Jarvis Desktop OS Agent"
         }
-        # 不携带 tools 参数，强制模型作为智能对话助手直接输出文本
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 1000
-        }
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=20)
-            if resp.status_code == 200:
-                data = resp.json()
-                choices = data.get("choices") or [{}]
-                reply = (choices[0].get("message", {}).get("content") or "").strip()
-                if reply:
-                    return reply
-        except Exception as e:
-            print(f"[Direct Chat Reply Error]: {e}")
+        models_to_try = [self.model_name]
+        if "bigmodel.cn" in self.api_base and "glm-4-flash" not in [m.lower() for m in models_to_try]:
+            models_to_try.append("glm-4-flash")
+
+        for m in models_to_try:
+            payload = {
+                "model": m,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=20)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices") or [{}]
+                    m_obj = choices[0].get("message", {})
+                    reply = (m_obj.get("content") or m_obj.get("reasoning_content") or "").strip()
+                    if reply:
+                        return reply
+            except Exception as e:
+                print(f"[Direct Chat Reply Error]: {e}")
         return None
 
     def humanize_speech_text(self, text: str) -> str:
@@ -440,27 +469,32 @@ class AgentBrain:
             "3. 遇到长代码或长表格时，自然概括为“相关配置已在屏幕为您展现”；\n"
             "4. 保持沉稳、专业、干练的口吻，只输出润化后的发音口述，严禁添加任何解释。"
         )
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": text}
-            ],
-            "temperature": 0.2,
-            "max_tokens": 1000
-        }
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                choices = data.get("choices") or [{}]
-                msg = choices[0].get("message") or {}
-                raw_content = msg.get("content")
-                speech_out = (raw_content or "").strip()
-                if speech_out:
-                    return speech_out
-        except Exception as e:
-            print(f"[Speech Humanizer] AI 语境润化降级: {e}")
+        models_to_try = [self.model_name]
+        if "bigmodel.cn" in self.api_base and "glm-4-flash" not in [m.lower() for m in models_to_try]:
+            models_to_try.append("glm-4-flash")
+
+        for m in models_to_try:
+            payload = {
+                "model": m,
+                "messages": [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": text}
+                ],
+                "temperature": 0.2,
+                "max_tokens": 1000
+            }
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices") or [{}]
+                    msg = choices[0].get("message") or {}
+                    raw_content = msg.get("content") or msg.get("reasoning_content")
+                    speech_out = (raw_content or "").strip()
+                    if speech_out:
+                        return speech_out
+            except Exception as e:
+                print(f"[Speech Humanizer] AI 语境润化降级: {e}")
 
         return text
 

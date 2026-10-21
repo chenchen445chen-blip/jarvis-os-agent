@@ -268,41 +268,131 @@ class OSTools:
         return {"success": False, "message": f"未知日历操作：{action}"}
 
     def check_emails(self, filter_unread: bool = True) -> Dict[str, Any]:
-        """读取邮件摘要（对接 IMAP 邮箱或本地邮件守护箱）"""
-        # 内置智能邮件守护箱模拟及 IMAP 接口
-        sample_emails = [
-            {
-                "id": "EM-1001",
-                "sender": "团队协同系统 <notice@corp.ai>",
-                "subject": "关于下周全息智能体研发评审会的通知",
-                "time": "今天 08:30",
-                "snippet": "请各位专家准备好关于桌面智能体粒子渲染与全双工语音管道的架构演示...",
-                "unread": True
-            },
-            {
-                "id": "EM-1002",
-                "sender": "GitHub Notifications <notifications@github.com>",
-                "subject": "[jarvis-os-agent] New release v1.0.0 ready",
-                "time": "昨天 19:45",
-                "snippet": "All desktop execution tools, wake word listener and 3D reactor have been compiled...",
-                "unread": False
+        """读取邮件摘要（对接真实 IMAP 邮箱或检测本地配置）"""
+        email_user = os.environ.get("EMAIL_USER", "").strip()
+        email_pass = os.environ.get("EMAIL_PASS", "").strip()
+        email_server = os.environ.get("EMAIL_IMAP_SERVER", "").strip() or "imap.qq.com"
+
+        # 若用户尚未在 .env 中配置个人邮箱，诚实反馈，绝不捏造假邮件
+        if not email_user or not email_pass:
+            return {
+                "success": False,
+                "configured": False,
+                "count": 0,
+                "emails": [],
+                "message": "先生，您当前尚未配置个人邮箱凭据（IMAP/SMTP）。如需查阅邮件，请在 .env 中配置 EMAIL_USER 与 EMAIL_PASS 授权码，或直接对我说“打开邮件客户端”。"
             }
-        ]
-        emails = [e for e in sample_emails if not filter_unread or e["unread"]]
-        summary = f"为您查询到 {len(emails)} 封未读邮件：\n" + "\n".join(
-            [f"• 来自 [{e['sender'].split('<')[0].strip()}]：{e['subject']} ({e['time']})" for e in emails]
-        )
-        return {
-            "success": True,
-            "count": len(emails),
-            "emails": emails,
-            "message": summary
-        }
+
+        # 尝试连接真实 IMAP 服务器
+        try:
+            import imaplib
+            import email
+            from email.header import decode_header
+
+            mail = imaplib.IMAP4_SSL(email_server)
+            mail.login(email_user, email_pass)
+            mail.select("INBOX")
+
+            search_criteria = "UNSEEN" if filter_unread else "ALL"
+            _, data = mail.search(None, search_criteria)
+            mail_ids = data[0].split()
+
+            if not mail_ids:
+                mail.close()
+                mail.logout()
+                return {
+                    "success": True,
+                    "configured": True,
+                    "count": 0,
+                    "emails": [],
+                    "message": "先生，您的邮箱当前没有未读邮件，收件箱很清爽。"
+                }
+
+            # 获取最新的前 5 封邮件摘要
+            emails = []
+            for m_id in reversed(mail_ids[-5:]):
+                _, msg_data = mail.fetch(m_id, "(RFC822.HEADER)")
+                raw_email = msg_data[0][1]
+                msg = email.message_from_bytes(raw_email)
+
+                # 解码主题
+                subject, encoding = decode_header(msg.get("Subject", ""))[0]
+                if isinstance(subject, bytes):
+                    subject = subject.decode(encoding or "utf-8", errors="ignore")
+
+                # 解码发件人
+                sender, encoding = decode_header(msg.get("From", ""))[0]
+                if isinstance(sender, bytes):
+                    sender = sender.decode(encoding or "utf-8", errors="ignore")
+
+                date_str = msg.get("Date", "")
+                emails.append({
+                    "id": m_id.decode("utf-8", errors="ignore"),
+                    "sender": sender,
+                    "subject": subject or "无主题",
+                    "time": date_str,
+                    "unread": True
+                })
+
+            mail.close()
+            mail.logout()
+
+            summary = f"为您查询到 {len(emails)} 封未读邮件：\n" + "\n".join(
+                [f"• 来自 [{e['sender'].split('<')[0].strip()}]：{e['subject']}" for e in emails]
+            )
+            return {
+                "success": True,
+                "configured": True,
+                "count": len(emails),
+                "emails": emails,
+                "message": summary
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "configured": True,
+                "count": 0,
+                "emails": [],
+                "message": f"连接邮箱服务器失败：{str(e)}。请检查邮箱授权码与 IMAP 端口设置。"
+            }
 
     def send_email(self, recipient: str, subject: str, content: str) -> Dict[str, Any]:
-        """发送邮件指令（支持配置 SMTP 或写入发信队列）"""
-        return {
-            "success": True,
-            "message": f"邮件已拟定并成功投递至发件队列！收件人：{recipient}，主题：{subject}",
-            "details": {"recipient": recipient, "subject": subject, "timestamp": datetime.datetime.now().isoformat()}
-        }
+        """发送邮件指令（支持配置 SMTP 或引导本地邮件客户端）"""
+        email_user = os.environ.get("EMAIL_USER", "").strip()
+        email_pass = os.environ.get("EMAIL_PASS", "").strip()
+        email_smtp = os.environ.get("EMAIL_SMTP_SERVER", "").strip() or "smtp.qq.com"
+
+        if not email_user or not email_pass:
+            return {
+                "success": False,
+                "configured": False,
+                "message": f"当前尚未配置发信邮箱凭据（SMTP）。请在 .env 中配置 EMAIL_USER 与 EMAIL_PASS 授权码，或者直接打开本地邮件客户端进行发送。"
+            }
+
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.header import Header
+
+            msg = MIMEText(content, "plain", "utf-8")
+            msg["From"] = Header(f"JARVIS OS <{email_user}>", "utf-8")
+            msg["To"] = Header(recipient, "utf-8")
+            msg["Subject"] = Header(subject, "utf-8")
+
+            server = smtplib.SMTP_SSL(email_smtp, 465)
+            server.login(email_user, email_pass)
+            server.sendmail(email_user, [recipient], msg.as_string())
+            server.quit()
+
+            return {
+                "success": True,
+                "configured": True,
+                "message": f"邮件已成功投递！收件人：{recipient}，主题：{subject}",
+                "details": {"recipient": recipient, "subject": subject}
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "configured": True,
+                "message": f"发送邮件失败：{str(e)}。请核对 SMTP 授权码。"
+            }

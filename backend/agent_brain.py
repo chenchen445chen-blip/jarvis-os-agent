@@ -467,7 +467,7 @@ class AgentBrain:
                     app_name = fallback_plan['args'].get('app_name', '')
                     reply = f"收到，正在为您调起应用程序：[{app_name}]。" if tool_result.get("success") else tool_result.get("message")
                 elif tool_executed == "check_emails":
-                    reply = f"已接入邮件守护箱。{tool_result.get('message')}"
+                    reply = tool_result.get("message", "已为您检查邮件收件箱。")
                 elif tool_executed == "manage_calendar":
                     reply = tool_result.get("message", "日历数据库已同步。")
                 elif tool_executed == "get_system_status":

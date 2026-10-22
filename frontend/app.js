@@ -128,6 +128,16 @@ async function handleUserCommand(command) {
       if (toolRes.file_path) {
         appendLog("SUCCESS", `[FILE] 目标文件: ${toolRes.file_path}`);
       }
+      
+      // 打开应用类工具专用状态提示
+      if (["open_application", "open_wechat", "launch_drawing_app"].includes(toolCall.name)) {
+        if (toolRes.success) {
+          appendLog("SUCCESS", `[APP OPENED] ${toolRes.message ?? `已成功打开应用: ${toolRes.app ?? toolCall.args?.app_name}`}`);
+        } else {
+          appendLog("WARN", `[APP FAILED] ${toolRes.message ?? `未能启动应用: ${toolRes.app ?? toolCall.args?.app_name}`}`);
+        }
+      }
+
       if (toolCall.name === "execute_command" && toolRes.command) {
         appendLog("INFO", `[TERMINAL] $ ${toolRes.command}`);
         if (toolRes.output) {
@@ -138,7 +148,9 @@ async function handleUserCommand(command) {
     }
 
     // 贾维斯·陈汇报与语音播报（屏幕展示视觉富文本，语音朗读 AI 结合语境润化后的地道发音文本）
-    bubbleTagEl.textContent = "JARVIS · CHEN 响应";
+    const isAppFailure = Boolean(toolCall && ["open_application", "open_wechat", "launch_drawing_app"].includes(toolCall.name) && !toolCall.result?.success);
+    bubbleTagEl.textContent = isAppFailure ? "JARVIS · CHEN 异常提示" : "JARVIS · CHEN 响应";
+    bubbleTagEl.style.color = isAppFailure ? "#ff0055" : "";
     bubbleTextEl.textContent = reply;
 
     const speechSpokenText = data?.speech_text ?? reply;

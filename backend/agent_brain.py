@@ -359,6 +359,10 @@ class AgentBrain:
                         m_obj = followup_choices[0].get("message", {})
                         followup_content = (m_obj.get("content") or m_obj.get("reasoning_content") or "").strip()
                         if followup_content:
+                            # 严格校验：若工具执行失败（如打开应用失败），确保模型回答中明确包含失败提示，防止模型幻觉报喜不报忧
+                            if tool_result.get("success") is False:
+                                if not any(neg in followup_content for neg in ["失败", "未能", "未找到", "没有安装", "无法", "未成功"]):
+                                    followup_content = f"{tool_result.get('message', '操作失败')}\n\n{followup_content}"
                             return {
                                 "reply": followup_content,
                                 "tool_executed": tool_name,
@@ -373,10 +377,12 @@ class AgentBrain:
                 if tool_name == "get_system_status":
                     reply = f"报告先生，当前系统时间为 {tool_result.get('local_time')}。系统运行平稳：CPU 占用为 {tool_result.get('cpu_usage')}，内存负载为 {tool_result.get('memory_usage')}，电量状态为 {tool_result.get('battery')}。"
                 elif tool_name == "open_wechat":
-                    reply = "已通过命令行成功为您调起微信客户端。"
+                    reply = tool_msg or ("已成功为您调起微信客户端。" if tool_result.get("success") else "未能调起微信：未检测到微信安装。")
                 elif tool_name == "open_application":
                     app_name = tool_args.get("app_name", "")
-                    reply = f"已成功为您调起应用程序：[{app_name}]。" if tool_result.get("success") else tool_result.get("message")
+                    reply = tool_msg or (f"已成功为您调起应用程序：[{app_name}]。" if tool_result.get("success") else f"未能启动应用 [{app_name}]。")
+                elif tool_name == "launch_drawing_app":
+                    reply = tool_msg or ("绘图工作台正在为您展开，已唤醒本地绘画环境。" if tool_result.get("success") else "未能启动本地绘图软件。")
                 elif tool_name == "play_music":
                     song = tool_args.get("song_name", "精选曲目")
                     reply = f"已启动音频矩阵，正在为您播放音乐：{song}。"
@@ -653,17 +659,16 @@ class AgentBrain:
                 
                 # 生成贾维斯口吻回答
                 if tool_executed == "open_wechat":
-                    cmd = tool_result.get("command", 'open -a "/Applications/WeChat.app"')
-                    reply = f"收到，正在执行命令行 [{cmd}] 为您启动微信。" if tool_result.get("success") else tool_result.get("message")
+                    reply = tool_result.get("message") or ("已成功为您调起微信客户端。" if tool_result.get("success") else "未能调起微信：未检测到微信安装。")
                 elif tool_executed == "play_music":
                     reply = f"已为您启动音频矩阵，正在播放：{fallback_plan['args'].get('song_name', '精选曲目')}。请尽情享受音乐。"
                 elif tool_executed == "generate_ai_image":
-                    reply = f"图像合成引擎已就绪！画面描述词已注入，生成结果已归档至本地系统目录。"
+                    reply = tool_result.get("message") or "图像合成引擎已就绪，生成结果已归档至本地系统目录。"
                 elif tool_executed == "launch_drawing_app":
-                    reply = f"绘图工作台正在为您展开，已唤醒本地绘画设计环境。"
+                    reply = tool_result.get("message") or ("绘图工作台正在为您展开，已唤醒本地绘画设计环境。" if tool_result.get("success") else "未能启动本地绘图软件。")
                 elif tool_executed == "open_application":
                     app_name = fallback_plan['args'].get('app_name', '')
-                    reply = f"收到，正在为您调起应用程序：[{app_name}]。" if tool_result.get("success") else tool_result.get("message")
+                    reply = tool_result.get("message") or (f"已成功为您调起应用程序：[{app_name}]。" if tool_result.get("success") else f"未能找到并启动应用 [{app_name}]。")
                 elif tool_executed == "check_emails":
                     reply = tool_result.get("message", "已为您检查邮件收件箱。")
                 elif tool_executed == "manage_calendar":

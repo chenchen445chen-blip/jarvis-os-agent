@@ -23,50 +23,68 @@ class OSTools:
         # 常用应用别名映射表 (针对 macOS 和 Windows 智能适配)
         self.app_aliases = {
             # 音乐类
-            "music": ["NeteaseMusic", "QQMusic", "Music", "Spotify", "CloudMusic"],
+            "music": ["Music", "NeteaseMusic", "QQMusic", "Spotify", "CloudMusic"],
             "网易云音乐": ["NeteaseMusic", "cloudmusic"],
             "qq音乐": ["QQMusic", "qqmusic"],
             "网易云": ["NeteaseMusic", "cloudmusic"],
-            "音乐播放器": ["Music", "NeteaseMusic", "Spotify"],
+            "音乐播放器": ["Music", "NeteaseMusic", "QQMusic", "Spotify"],
+            "音乐": ["Music", "NeteaseMusic", "QQMusic"],
             
             # 绘图设计类
-            "drawing": ["Photoshop", "Sketch", "Figma", "mspaint", "GIMP"],
-            "画图": ["mspaint", "Paint", "Preview"],
+            "drawing": ["Preview", "Photoshop", "Sketch", "Figma", "mspaint", "GIMP"],
+            "画图": ["Preview", "Paint", "mspaint"],
+            "画图软件": ["Preview", "Paint", "mspaint"],
             "ps": ["Adobe Photoshop 2024", "Adobe Photoshop", "Photoshop"],
             "photoshop": ["Adobe Photoshop 2024", "Photoshop"],
             "figma": ["Figma"],
             
             # 办公与日常
             "浏览器": ["Google Chrome", "Safari", "Microsoft Edge", "Firefox"],
-            "chrome": ["Google Chrome"],
+            "谷歌浏览器": ["Google Chrome", "Chrome"],
+            "chrome": ["Google Chrome", "Chrome"],
+            "safari": ["Safari"],
             "日历": ["Calendar"],
             "邮件": ["Mail"],
+            "邮箱": ["Mail"],
             "微信": ["WeChat"],
             "计算器": ["Calculator"],
-            "代码编辑器": ["Visual Studio Code", "code"],
+            "备忘录": ["Notes"],
+            "便签": ["Stickies", "Notes"],
+            "设置": ["System Settings", "System Preferences"],
+            "系统设置": ["System Settings", "System Preferences"],
+            "地图": ["Maps"],
+            "天气": ["Weather"],
+            "照片": ["Photos"],
+            "访达": ["Finder"],
+            "代码编辑器": ["Visual Studio Code", "Cursor", "Antigravity IDE", "HBuilderX", "code"],
             "vscode": ["Visual Studio Code", "code"],
-            "终端": ["Terminal", "iTerm"]
+            "cursor": ["Cursor"],
+            "终端": ["Terminal", "iTerm", "iTerm2"]
         }
 
     def open_application(self, app_name: str) -> Dict[str, Any]:
-        """调起或激活本地指定的应用程序"""
+        """调起或激活本地指定的应用程序，并返回清晰的成功或失败提示"""
         target_name = app_name.strip()
-        candidates = self.app_aliases.get(target_name.lower(), [target_name])
+        candidates = list(self.app_aliases.get(target_name.lower(), []))
+        if target_name not in candidates:
+            candidates.append(target_name)
+
         executed_candidate = None
         success = False
-        error_msg = ""
+        error_detail = ""
 
         for cand in candidates:
             try:
                 if SYSTEM_OS == "Darwin":  # macOS
-                    # 使用 macOS 原生 open 命令
                     res = subprocess.run(["open", "-a", cand], capture_output=True, text=True, timeout=5)
                     if res.returncode == 0:
                         success = True
                         executed_candidate = cand
                         break
+                    else:
+                        if not error_detail and res.stderr:
+                            error_detail = res.stderr.strip()
                 elif SYSTEM_OS == "Windows":
-                    # Windows 命令调起
                     os.system(f'start "" "{cand}"')
                     success = True
                     executed_candidate = cand
@@ -77,47 +95,68 @@ class OSTools:
                         success = True
                         executed_candidate = cand
                         break
+                    else:
+                        if not error_detail and res.stderr:
+                            error_detail = res.stderr.strip()
             except Exception as e:
-                error_msg = str(e)
+                error_detail = str(e)
+
+        # macOS 深度检索：若指定名称未能直接调起，智能遍历应用程序目录扫描匹配的 .app
+        if not success and SYSTEM_OS == "Darwin":
+            search_dirs = [
+                Path("/Applications"),
+                Path("/System/Applications"),
+                Path("/System/Applications/Utilities"),
+                Path.home() / "Applications"
+            ]
+            clean_kw = target_name.lower().replace(".app", "")
+            for d in search_dirs:
+                if d.exists():
+                    for app_file in d.glob("*.app"):
+                        app_stem = app_file.stem
+                        if clean_kw in app_stem.lower() or app_stem.lower() in clean_kw:
+                            res = subprocess.run(["open", str(app_file)], capture_output=True, text=True, timeout=5)
+                            if res.returncode == 0:
+                                success = True
+                                executed_candidate = app_stem
+                                break
+                    if success:
+                        break
 
         if success:
             return {
                 "success": True,
-                "message": f"已成功为您启动或切换至应用程序：{executed_candidate}",
-                "app": executed_candidate
+                "status": "success",
+                "app": executed_candidate,
+                "message": f"已成功为您启动或切换至应用程序：[{executed_candidate}]。"
             }
         else:
-            # 降级尝试：如果是 URL 或常规尝试
             return {
                 "success": False,
-                "message": f"未能找到并启动应用 [{app_name}]。系统提示: {error_msg or '未找到对应可执行程序'}",
-                "app": app_name
+                "status": "failed",
+                "app": app_name,
+                "message": f"未能启动应用 [{app_name}]：系统中未检测到该应用程序，请确认是否已安装或名称是否准确。"
             }
 
     def open_wechat(self) -> Dict[str, Any]:
-        """通过操作系统原生命令行调起微信客户端"""
-        if SYSTEM_OS == "Darwin":
-            # macOS 命令行唤醒指令
-            cmd = 'open -a "/Applications/WeChat.app"'
-        elif SYSTEM_OS == "Windows":
-            # Windows 命令行唤醒指令
-            cmd = 'start "" "WeChat"'
+        """通过操作系统原生命令行调起微信客户端并返回状态提示"""
+        res = self.open_application("微信")
+        if res.get("success"):
+            return {
+                "success": True,
+                "status": "success",
+                "app": "微信",
+                "command": 'open -a "/Applications/WeChat.app"' if SYSTEM_OS == "Darwin" else "WeChat",
+                "message": "已成功为您启动或切换至微信客户端。"
+            }
         else:
-            cmd = 'which wechat && wechat'
-
-        try:
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
-            success = res.returncode == 0
-            message = f"命令行执行成功：[{cmd}]，已调起微信" if success else f"命令行执行失败：{res.stderr.strip()}"
-        except Exception as e:
-            success = False
-            message = f"执行命令行异常：{str(e)}"
-
-        return {
-            "success": success,
-            "command": cmd,
-            "message": message
-        }
+            return {
+                "success": False,
+                "status": "failed",
+                "app": "微信",
+                "command": 'open -a "/Applications/WeChat.app"' if SYSTEM_OS == "Darwin" else "WeChat",
+                "message": "微信启动失败：系统中未检测到微信客户端，请确认是否已安装。"
+            }
 
     def execute_command(self, command: str, cwd: str = "") -> Dict[str, Any]:
         """
@@ -338,18 +377,159 @@ class OSTools:
         }
 
     def launch_drawing_app(self, app_name: str = "画图") -> Dict[str, Any]:
-        """打开本地绘画或作图软件"""
-        return self.open_application(app_name or "画图")
+        """打开本地绘画或作图软件并返回明确提示"""
+        target = app_name or "画图"
+        res = self.open_application(target)
+        if res.get("success"):
+            return {
+                "success": True,
+                "status": "success",
+                "app": res.get("app", target),
+                "message": f"绘图工作台启动成功，已为您唤醒本地画图软件：[{res.get('app', target)}]"
+            }
+        else:
+            return {
+                "success": False,
+                "status": "failed",
+                "app": target,
+                "message": f"绘图软件启动失败：系统中未检测到可用的绘画工具 [{target}]，请确认是否已安装绘图软件。"
+            }
 
     def generate_ai_image(self, prompt: str, negative_prompt: str = "") -> Dict[str, Any]:
         """
-        联动本地/远程 AI 绘图引擎 (兼容 Stable Diffusion WebUI API / ComfyUI / 本地快速合成)
+        联动云端/本地 AI 绘图引擎 (兼容 OpenAI / 智谱 CogView / 硅基流动 Flux / 本地 SD WebUI / 兜底矢量合成)
         """
-        sd_url = "http://127.0.0.1:7860/sdapi/v1/txt2img"
+        # 动态刷新 .env 配置，方便用户热更新生图模型和独立 AppKey
+        env_file = Path(__file__).resolve().parent.parent / ".env"
+        if env_file.exists():
+            try:
+                with open(env_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            os.environ[k.strip()] = v.strip().strip("'\"")
+            except Exception:
+                pass
+
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = self.generated_images_dir / f"jarvis_gen_{timestamp}.png"
 
-        # 1. 尝试检测并调用本地 Stable Diffusion WebUI 接口
+        # 1. 尝试调用云端文生图 API（优先使用 IMAGE_* 配置，未指定时自动回退复用 LLM_* 配置）
+        img_key = os.getenv("IMAGE_API_KEY", "").strip() or os.getenv("LLM_API_KEY", "").strip()
+        img_base = os.getenv("IMAGE_BASE_URL", "").strip() or os.getenv("LLM_BASE_URL", "").strip()
+        img_model = os.getenv("IMAGE_MODEL", "").strip()
+
+        # 若未显式指定 img_model，但配置了独立的生图 Key 或智谱服务，自动推断适配模型
+        if not img_model and (os.getenv("IMAGE_API_KEY") or "bigmodel.cn" in img_base):
+            img_model = "cogview-3-plus" if "bigmodel.cn" in img_base else "dall-e-3"
+
+        cloud_error_msg = ""
+        if img_key and img_model:
+            try:
+                # 判断是否为 Google Gemini 原生模型 (如 gemini-3-pro-image)
+                if "gemini" in img_model.lower() or "googleapis.com" in img_base:
+                    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{img_model}:generateContent?key={img_key}"
+                    gemini_payload = {
+                        "contents": [
+                            {
+                                "parts": [{"text": prompt}]
+                            }
+                        ],
+                        "generationConfig": {
+                            "responseModalities": ["IMAGE"]
+                        }
+                    }
+                    payload = json.dumps(gemini_payload).encode("utf-8")
+                    req = urllib.request.Request(
+                        endpoint,
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-goog-api-key": img_key,
+                            "User-Agent": "Jarvis-OS-Agent/1.0"
+                        },
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        res_data = json.loads(resp.read().decode("utf-8"))
+                        candidates = res_data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            for p in parts:
+                                inline = p.get("inlineData") or p.get("inline_data")
+                                if inline and inline.get("data"):
+                                    import base64
+                                    with open(output_file, "wb") as f:
+                                        f.write(base64.b64decode(inline["data"]))
+                                    break
+                else:
+                    # 兼容标准 OpenAI 格式接口 (智谱 CogView / OpenAI DALL-E / 硅基流动 Flux 等)
+                    endpoint = f"{img_base.rstrip('/')}/images/generations"
+                    payload_dict = {
+                        "model": img_model,
+                        "prompt": prompt
+                    }
+                    if negative_prompt and "dall-e" not in img_model.lower():
+                        payload_dict["negative_prompt"] = negative_prompt
+
+                    payload = json.dumps(payload_dict).encode("utf-8")
+                    req = urllib.request.Request(
+                        endpoint,
+                        data=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {img_key}",
+                            "User-Agent": "Jarvis-OS-Agent/1.0"
+                        },
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        res_data = json.loads(resp.read().decode("utf-8"))
+                        img_items = res_data.get("data", []) or res_data.get("images", [])
+                        if img_items:
+                            first_item = img_items[0]
+                            img_url = first_item.get("url")
+                            b64_data = first_item.get("b64_json") or first_item.get("image")
+
+                            if img_url:
+                                dl_req = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
+                                with urllib.request.urlopen(dl_req, timeout=30) as dl_resp:
+                                    with open(output_file, "wb") as f:
+                                        f.write(dl_resp.read())
+                            elif b64_data:
+                                import base64
+                                with open(output_file, "wb") as f:
+                                    f.write(base64.b64decode(b64_data))
+
+                if output_file.exists() and output_file.stat().st_size > 0:
+                    if SYSTEM_OS == "Darwin":
+                        try:
+                            subprocess.Popen(["open", str(output_file)])
+                        except Exception:
+                            pass
+
+                    return {
+                        "success": True,
+                        "engine": f"Cloud [{img_model}]",
+                        "file_path": str(output_file),
+                        "url": f"/static/generated/{output_file.name}",
+                        "message": f"AI 绘画完成！已通过云端模型 [{img_model}] 生成并保存至：{output_file.name}"
+                    }
+            except urllib.error.HTTPError as he:
+                try:
+                    err_json = json.loads(he.read().decode("utf-8"))
+                    err_detail = err_json.get("error", {}).get("message") or str(err_json)
+                    cloud_error_msg = f"{img_model} 官方返回 HTTP {he.code}: {err_detail[:120]}"
+                except Exception:
+                    cloud_error_msg = f"{img_model} HTTP {he.code} 请求被拒绝"
+                print(f"[IMAGE GENERATION WARNING] {cloud_error_msg}")
+            except Exception as e:
+                cloud_error_msg = f"{img_model} 调用异常: {str(e)[:80]}"
+                print(f"[IMAGE GENERATION WARNING] {cloud_error_msg}")
+
+        # 2. 尝试检测并调用本地 Stable Diffusion WebUI 接口
+        sd_url = "http://127.0.0.1:7860/sdapi/v1/txt2img"
         try:
             payload = json.dumps({
                 "prompt": prompt,
@@ -371,13 +551,20 @@ class OSTools:
                 img_data = base64.b64decode(result["images"][0])
                 with open(output_file, "wb") as f:
                     f.write(img_data)
+                if SYSTEM_OS == "Darwin":
+                    try:
+                        subprocess.Popen(["open", str(output_file)])
+                    except Exception:
+                        pass
                 return {
                     "success": True,
                     "engine": "Stable Diffusion WebUI",
                     "file_path": str(output_file),
+                    "url": f"/static/generated/{output_file.name}",
                     "message": f"AI 绘画完成！已通过本地 SD 生成并保存至：{output_file.name}"
                 }
         except Exception:
+            pass
             # 2. 当无外部 GPU 绘图服务时，生成科技风 SVG/概念渲染图并保存，保证体验不断裂
             svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
   <defs>
@@ -409,12 +596,13 @@ class OSTools:
             with open(svg_file, "w", encoding="utf-8") as f:
                 f.write(svg_content)
             
+            fallback_notice = f"（注：云端生图服务 {cloud_error_msg}，已启动安全兜底机制为您生成概念图）" if cloud_error_msg else ""
             return {
                 "success": True,
                 "engine": "Built-in Vector Synth",
                 "file_path": str(svg_file),
                 "url": f"/static/generated/{svg_file.name}",
-                "message": f"已完成画面生成！画面描述：[{prompt}]，文件已保存至：{svg_file.name}"
+                "message": f"已完成画面生成！画面描述：[{prompt}]{fallback_notice}，文件已保存至：{svg_file.name}"
             }
 
     def get_system_status(self) -> Dict[str, Any]:
